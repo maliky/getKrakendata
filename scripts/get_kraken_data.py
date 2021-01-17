@@ -202,7 +202,7 @@ if __name__ == "__main__":
         "--waitTime",
         help=("time to wait between calls in second"),
         type=int,
-        default=1,
+        default=1.2,
     )
 
     args = parser.parse_args()

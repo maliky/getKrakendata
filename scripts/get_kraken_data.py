@@ -17,7 +17,7 @@ from pathlib import Path
 import pytz
 
 import pandas as pd
-import getKrakenData as kr
+import getKrakenData.api as kapi
 from btxAnalysis import stattimes as st
 
 
@@ -25,7 +25,7 @@ class GetTradeData(object):
     def __init__(self, bname, pair: str, timezone: str, as_csv=True):
 
         # initiate api
-        self.k = kr.KolaKrakenAPI(tier=None, retry=0.1)
+        self.k = kapi.KolaKrakenAPI(tier=None, retry=0.1)
 
         # set pair
         self.pair = pair

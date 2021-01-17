@@ -1,0 +1,3 @@
+error: cannot format -: cannot use --safe with this file; failed to parse source file.  AST error message: invalid syntax (<unknown>, line 67)
+Oh no! 💥 💔 💥
+1 file failed to reformat.

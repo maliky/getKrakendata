@@ -18,7 +18,7 @@ import pytz
 from time import sleep
 
 import pandas as pd
-import getKrakenData.api as kapi
+import getKrakenData.getKrakenData as kapi
 from btxAnalysis import stattimes as st
 
 

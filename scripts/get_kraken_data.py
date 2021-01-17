@@ -49,6 +49,8 @@ class GetTradeData(object):
         # update or new download?
         if not since:
             fs = [f for f in os.listdir(self.folder) if not f.startswith("_")]
+
+            # get the last time stamp in the folder to run an update
             if len(fs) > 0:
                 fs.sort()
                 next_start_ts = int(fs[-1].split(".")[0])
@@ -77,7 +79,7 @@ class GetTradeData(object):
 
         print("\n download/update finished!")
 
-    def agg_ohlc(self, since: int, interval):
+    def agg_ohlc(self, since: int, interval:int=1):
 
         # fetch files and convert to dataframe
         _fs = [
@@ -129,9 +131,10 @@ def main(
 
     dl = GetTradeData(bname, pair, timezone, waitTime)
     end_ts = pd.Timestamp.now() - pd.Timedelta("60s")
-    if not interval:
-        dl.download_trade_data(since, end_ts)
-    else:
+
+    dl.download_trade_data(since, end_ts)
+
+    if interval:
         dl.agg_ohlc(since, interval)
 
 

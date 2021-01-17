@@ -181,10 +181,15 @@ class KolaKrakenAPI:
         drop_ts_ should the ts columns be droped?
         """
         raw_trades = self.get_recent_trades_raw(pair_, since_)
-        trades = DataFrame(
-            data=raw_trades[pair_],
-            columns=["price", "volume", "ts", "side", "order", "misc"],
-        )
+        try:
+            trades = DataFrame(
+                data=raw_trades[pair_],
+                columns=["price", "volume", "ts", "side", "order", "misc"],
+            )
+        except KeyError as ke:
+            # need to handle this in a better way
+            return pd.DataFrame(raw_trades)
+        
         trades = make_tsh_index(trades, drop_=drop_ts_)
         return trades
 

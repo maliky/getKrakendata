@@ -15,6 +15,7 @@ import argparse
 import os
 from pathlib import Path
 import pytz
+from time import sleep
 
 import pandas as pd
 import getKrakenData.api as kapi
@@ -22,8 +23,13 @@ from btxAnalysis import stattimes as st
 
 
 class GetTradeData(object):
-    def __init__(self, bname, pair: str, timezone: str, as_csv=True):
-
+    def __init__(self, bname, pair: str, timezone: str = "Africa/Abidjan", wait_time=1):
+        """
+        bname : base folder name
+        pair: name of the pair to download
+        timezone: in the forme Africa/Abidjan
+        wait_time: time to wait between call (default 1)
+        """
         # initiate api
         self.k = kapi.KolaKrakenAPI(tier=None, retry=0.1)
 
@@ -36,10 +42,7 @@ class GetTradeData(object):
         self.folder = Path(f"{bname}-{pair}")
         os.makedirs(self.folder, exist_ok=True)
 
-        if as_csv:
-            self.save = lambda x, y: x.to_csv(y)
-        else:
-            self.save = lambda x, y: x.to_pickle(y)
+        self.wait_time = wait_time
 
     def download_trade_data(self, since, end_ts):
 
@@ -66,8 +69,11 @@ class GetTradeData(object):
 
             # store
             fout = self.folder.joinpath(f"{start_ts}.csv")
-            print(f"Trade data from ts {start_ts} ({pd.Timestamp(start_ts*1e9)}) --> {fout}")
+            print(
+                f"Trade data from ts {start_ts} ({pd.Timestamp(start_ts*1e9)}) --> {fout}"
+            )
             trades.to_csv(fout)
+            sleep(self.wait_time)
 
         print("\n download/update finished!")
 
@@ -91,7 +97,6 @@ class GetTradeData(object):
         trades = trades.drop("tsh", axis=1)
 
         trades.loc[:, "cost"] = trades.price * trades.volume
-
 
         # resample
         gtrades = trades.resample(pd.Timedelta(f"{interval}min"))
@@ -118,9 +123,11 @@ class GetTradeData(object):
         ohlc.to_csv(fout)
 
 
-def main(bname: str, pair: str, since: int, timezone: str, interval: str, asCSV: bool):
+def main(
+    bname: str, pair: str, since: int, timezone: str, interval: str, waitTime: int
+):
 
-    dl = GetTradeData(bname, pair, timezone, asCSV)
+    dl = GetTradeData(bname, pair, timezone, waitTime)
     end_ts = pd.Timestamp.now() - pd.Timedelta("60s")
     if not interval:
         dl.download_trade_data(since, end_ts)
@@ -189,7 +196,10 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--asCSV", help=("If present  stores data as csv"), action="store_true",
+        "--waitTime",
+        help=("time to wait between calls in second"),
+        type=int,
+        default=1,
     )
 
     args = parser.parse_args()
@@ -201,5 +211,5 @@ if __name__ == "__main__":
         since=args.since,
         timezone=args.timezone,
         interval=args.interval,
-        asCSV=args.asCSV,
+        waitTime=args.waitTime,
     )

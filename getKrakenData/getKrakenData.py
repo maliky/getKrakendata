@@ -96,11 +96,13 @@ class KolaKrakenAPI:
         )
         return self._asset_pairs
 
-    def get_tradable_pairs(self, base_="", quote_=""):
+    def get_tradable_pairs(self, base_="", quote_="", live=False):
         """
         Renvois les pairs qui peuvent être échangéé
         base_ est la monnaie d'ont on affiche le prix en quote_
         """
+        if not live_:
+            return TRADABLE_PAIRS
         _asset_pairs = self.get_asset_pairs()
         return [
             c
@@ -189,7 +191,7 @@ class KolaKrakenAPI:
         except KeyError as ke:
             # need to handle this in a better way
             return pd.DataFrame(raw_trades)
-        
+
         trades = make_tsh_index(trades, drop_=drop_ts_)
         return trades
 

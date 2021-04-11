@@ -65,9 +65,13 @@ class GetTradeData(object):
             trades = self.k.get_recent_trades(pair_=self.pair, since_=next_start_ts)
             start_ts, next_start_ts = st.ts_extent(trades, as_unix_ts_=True)
 
-            # set timezone
-            index = trades.index.tz_localize(pytz.utc).tz_convert(self.tz)
-            trades.index = index
+            try:
+                # set timezone
+                index = trades.index.tz_localize(pytz.utc).tz_convert(self.tz)
+                trades.index = index
+            except AttributeError as ae:
+                print(f"trades = {trades}; next_start_ts={next_start_ts} ################")
+                raise (ae)
 
             # store
             fout = self.folder.joinpath(f"{start_ts}.csv")
@@ -79,7 +83,7 @@ class GetTradeData(object):
 
         print("\n download/update finished!")
 
-    def agg_ohlc(self, since: int, interval:int=1):
+    def agg_ohlc(self, since: int, interval: int = 1):
 
         # fetch files and convert to dataframe
         _fs = [
@@ -115,7 +119,7 @@ class GetTradeData(object):
         ohlc.vwap.fillna(ohlc.close, inplace=True)
 
         # count
-        ohlc.loc[:, "count"] = gtrades.size()
+        ohlc.loc[:, "nb"] = gtrades.size()
 
         start_tsh, end_tsh = st.ts_extent(ohlc, as_unix_ts_=False)
         start_ts, end_ts = st.ts_extent(ohlc, as_unix_ts_=True)
@@ -126,7 +130,7 @@ class GetTradeData(object):
 
 
 def main(
-    bname: str, pair: str, since: int, timezone: str, interval: str, waitTime: int
+    bname: str, pair: str, since: int, timezone: str, interval: int, waitTime: int
 ):
 
     dl = GetTradeData(bname, pair, timezone, waitTime)

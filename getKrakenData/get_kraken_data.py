@@ -21,11 +21,14 @@ import pandas as pd
 import getKrakenData.getKrakenData as kapi
 from mlkHelper.timeUtils import ts_extent
 import logging
+
 logger = logging.getLogger()
 
 
 class GetTradeData(object):
-    def __init__(self, folder, pair: str, timezone: str = "Africa/Abidjan", wait_time=1.2):
+    def __init__(
+        self, folder, pair: str, timezone: str = "Africa/Abidjan", wait_time=1.2
+    ):
         """
         folder : base folder name
         pair: name of the pair to download
@@ -47,9 +50,15 @@ class GetTradeData(object):
         self.wait_time = wait_time
 
     def __repr__(self):
-        _repr = {"kapi": self.kapi, "pair": self.pair, "tz": self.tz, "folder": self.folder, "wait_time": self.wait_time}
+        _repr = {
+            "kapi": self.kapi,
+            "pair": self.pair,
+            "tz": self.tz,
+            "folder": self.folder,
+            "wait_time": self.wait_time,
+        }
         return pformat(_repr)
-    
+
     def download_trade_data(self, since, end_ts):
 
         # update or new download?
@@ -68,12 +77,10 @@ class GetTradeData(object):
         # get data
         while next_start_ts < end_ts.timestamp():
 
-            try:
-                trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
-                if not len(trades):
-                    raise Exception(f"not trades : {self}")
+            trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
+            if not len(trades):
+                raise Exception(f"not trades : {self}")
 
-                
             start_ts, next_start_ts = ts_extent(trades, as_unix_ts_=True)
 
             try:
@@ -81,7 +88,9 @@ class GetTradeData(object):
                 index = trades.index.tz_localize(pytz.utc).tz_convert(self.tz)
                 trades.index = index
             except AttributeError as ae:
-                print(f"### trades={trades}; next_start_ts={next_start_ts} ################")
+                print(
+                    f"### trades={trades}; next_start_ts={next_start_ts} ################"
+                )
                 raise (ae)
 
             # store
@@ -142,28 +151,34 @@ class GetTradeData(object):
 
 
 def main(
-        folder: str, pair: str, since: int, timezone: str, interval: int, waitTime: int
+    folder: str, pair: str, since: int, timezone: str, interval: int, waitTime: int
 ):
 
     dl = GetTradeData(folder, pair, timezone, waitTime)
     end_ts = pd.Timestamp.now() - pd.Timedelta("60s")
 
-    logger.info(f'Starts downloading in {folder}/{pair} with TZ {timezone}. from {since}-to {end_ts}')
+    logger.info(
+        f"Starts downloading in {folder}/{pair} with TZ {timezone}. from {since}-to {end_ts}"
+    )
     dl.download_trade_data(since, end_ts)
 
     if interval:
-        logger.info(f'computing ohlc for {interval}m.')
+        logger.info(f"computing ohlc for {interval}m.")
         dl.agg_ohlc(since, interval)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description=__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
         "--folder",
-        help=("In which (parent) folder to store data.  The final folder "
-              " is the asset pair name"),
+        help=(
+            "In which (parent) folder to store data.  The final folder "
+            " is the asset pair name"
+        ),
         type=str,
         default="./Kraken",
     )
@@ -223,9 +238,9 @@ def parse_args():
 
     return parser.parse_args()
 
-        
+
 def main_prg():
-    args =  parse_args()
+    args = parse_args()
     # execute
     main(
         folder=args.folder,
@@ -239,4 +254,3 @@ def main_prg():
 
 if __name__ == "__main__":
     main_prg()
-

@@ -14,7 +14,7 @@ with open("README.rst", "r") as f:
 
 setup(
     name="getKrakenData",
-    version="0.1.3",
+    version="0.1.4",
     description="Utility to download kraken data historicaly",
     long_description=long_description,
     long_description_content_type="text/x-rst",
@@ -26,7 +26,7 @@ setup(
     python_requires=">=3.8",
     entry_points={
         "console_scripts": [
-            "get_kraken_data=scripts.get_kraken_data:main_prg",
+            "get_kraken_data=getKrakenData.get_kraken_data:main_prg",
         ]
     },
     install_requires=[
@@ -36,7 +36,7 @@ setup(
         "pycoingecko",  # coingecko python API
         "krakenex",  # 'official' low level krakene api
         "pykrakenapi",  # wrapper adding throtteling function
-        "btxAnalysis",  # some fincance utilities
+        "mlkHelper",  # some fincance utilities
     ],
     extras_require={
         'dev': ['mypy', 'flake8', 'black'],

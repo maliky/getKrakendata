@@ -2,14 +2,17 @@
 """function to simplifie kraken api calls"""
 from typing import List
 import functools
+import os
 
+from pprint import pformat
 from numpy import dtype
-from pandas import Series, DataFrame, Timestamp
+from pandas import Series, DataFrame
 import pandas as pd
-
 
 import krakenex as krx
 from pykrakenapi.pykrakenapi import crl_sleep, callratelimiter
+
+from getKrakenData.constante import KRAKEN_TRADABLE_PAIRS_USD_QUOTE
 
 # https://www.kraken.com/features/api#public-market-data
 
@@ -37,10 +40,13 @@ def fmt_output(as_="DataFrame"):
 
 
 class KolaKrakenAPI:
-    def __init__(self, keyfile="keys.txt", tier="Intermediate", retry=1, crl_sleep=5):
+    def __init__(self, keyfile="keys.txt", tier="Intermediate", retry=2, crl_sleep=10):
         """Init for KolaKraken"""
         self._api = krx.API()
-        self._api.load_key("keys.txt")
+        try:
+            self._api.load_key("keys.txt")
+        except FileNotFoundError as fnfe:
+            raise Exception(f"No keys.txt file in {os.getcwd()}: {fnfe}")
         self._asset = None
         self._asset_pairs = None
 
@@ -70,6 +76,18 @@ class KolaKrakenAPI:
         self.retry = retry
         self.crl_sleep = crl_sleep
 
+    def __repr__(self):
+        doc = {
+            "crl_sleep": self.crl_sleep,
+            "retry": self.retry,
+            "time_of_last_public_query": self.time_of_last_public_query,
+            "time_of_last_query": self.time_of_last_query,
+            "api_counter": self.api_counter,
+            "_asset": self._asset,
+            "_asset_pairs": self._asset_pairs,
+        }
+        return pformat(doc)
+
     @fmt_output()
     def get_assets(self):
         self._asset = self._api.query_public("Assets")
@@ -87,7 +105,7 @@ class KolaKrakenAPI:
     def get_asset_pairs(self):
         """
         base_ est la monnaie d'ont on affiche le prix en quote_
-        Renvois les pairs qui peuvent être échangé
+        Renvois les pairs qui peuvent être échangées
         """
         self._asset_pairs = (
             self._api.query_public("AssetPairs")
@@ -98,11 +116,11 @@ class KolaKrakenAPI:
 
     def get_tradable_pairs(self, base_="", quote_="", live=False):
         """
-        Renvois les pairs qui peuvent être échangéé
+        Renvois les pairs qui peuvent être échangées
         base_ est la monnaie d'ont on affiche le prix en quote_
         """
-        if not live_:
-            return TRADABLE_PAIRS
+        if not live:
+            return KRAKEN_TRADABLE_PAIRS_USD_QUOTE
         _asset_pairs = self.get_asset_pairs()
         return [
             c
@@ -156,7 +174,8 @@ class KolaKrakenAPI:
         """
         _data = self.get_ohlc_data(pair_, interval_, since_)[pair_]
         ohlc = DataFrame(
-            data=_data, columns=["ts", "o", "h", "l", "c", "vwap", "volume", "count"],
+            data=_data,
+            columns=["ts", "o", "h", "l", "c", "vwap", "volume", "count"],
         )
         ohlc = make_tsh_index(ohlc)
         return ohlc
@@ -188,7 +207,7 @@ class KolaKrakenAPI:
                 data=raw_trades[pair_],
                 columns=["price", "volume", "ts", "side", "order", "misc"],
             )
-        except KeyError as ke:
+        except KeyError:
             # need to handle this in a better way
             return pd.DataFrame(raw_trades)
 
@@ -203,7 +222,7 @@ class KolaKrakenAPI:
         return:
         <pair_name> = pair name
         asks = ask side array of array entries(<price>, <volume>, <timestamp>)
-        bids = bid side array of array entries(<price>, <volume>, <timestamp>)        """
+        bids = bid side array of array entries(<price>, <volume>, <timestamp>)"""
         return self._api.query_public("Depth", data={"pair": pair_, "count": count_})
 
     def get_order_book(self, pair_="ADAXBT", count_=None):
@@ -213,7 +232,7 @@ class KolaKrakenAPI:
         return:
         <pair_name> = pair name
         asks = ask side array of array entries(<price>, <volume>, <timestamp>)
-        bids = bid side array of array entries(<price>, <volume>, <timestamp>)        """
+        bids = bid side array of array entries(<price>, <volume>, <timestamp>)"""
         _datum = ["price", "volume", "ts"]
 
         _order_book = self.get_order_book_raw(pair_, count_)[pair_]
@@ -234,7 +253,7 @@ class KolaKrakenAPI:
         """
         pair = asset pair to get spread data for
         since = return spread data since given id (optional.  inclusive)
-        
+
         return:
         <pair_name> = pair name
         array of array entries(<time>, <bid>, <ask>)
@@ -246,9 +265,9 @@ class KolaKrakenAPI:
 
 def to_tsh(ts_serie, tsh_resolution_="ms", ts_factor_=1e9):
     """
-    Timestamp human (tsh) readable 
+    Timestamp human (tsh) readable
     Convert a series of ts from pd.Timestamp().timestamp to a readable date
-    
+
     tsh_resolution_ (def s) : how should the ts be rounded?
     ts_factor_ is the factor by which to multiply the ts_serie. before convertion.
     1 for ms resolution, 1e9 for nano resolution
@@ -257,9 +276,10 @@ def to_tsh(ts_serie, tsh_resolution_="ms", ts_factor_=1e9):
         # suppos it is str and in human readable format
         return pd.to_datetime(ts_serie)
 
-    return list(
-        map(lambda ts: ts.round(tsh_resolution_), pd.to_datetime(ts_serie * ts_factor_))
-    )
+    def _round_ts(ts):
+        return ts.round(tsh_resolution_)
+
+    return list(map(_round_ts, pd.to_datetime(ts_serie * ts_factor_)))
 
 
 def make_tsh_index(df_: DataFrame, col_to_tsh_: str = "ts", drop_: bool = True):

@@ -2,48 +2,54 @@
 Download trade data for a kraken asset pair. Updates can be downloaded by
 simply calling this script again.
 
-Data is stored as pandas.DataFrame's (in "unixtimestamp.pickle" format).
-Use pd.read_pickle(file) to load data into memory.
+Data is stored as pandas.DataFrame's (in "unixtimestamp.csv" format).
+Use pd.read_csv(file) to load data into memory.
 
 Use the ``interval`` argument to sample trade data into ohlc format instead of
 downloading/updating trade data. Data is stored as a pandas.DataFrame (in
-"pair_interval.pickle" format).
-
+"_olhc_interval.csv" format).
 """
 
 import argparse
 import os
 from pathlib import Path
+from pprint import pformat
 import pytz
 from time import sleep
 
 import pandas as pd
 import getKrakenData.getKrakenData as kapi
-from btxAnalysis import stattimes as st
+from mlkHelper.timeUtils import ts_extent
+import logging
+logger = logging.getLogger()
 
 
 class GetTradeData(object):
-    def __init__(self, bname, pair: str, timezone: str = "Africa/Abidjan", wait_time=1):
+    def __init__(self, folder, pair: str, timezone: str = "Africa/Abidjan", wait_time=1.2):
         """
-        bname : base folder name
+        folder : base folder name
         pair: name of the pair to download
         timezone: in the forme Africa/Abidjan
-        wait_time: time to wait between call (default 1)
+        wait_time: time to wait between call (default 1.2 s)
         """
         # initiate api
-        self.k = kapi.KolaKrakenAPI(tier=None, retry=0.1)
+        self.kapi = kapi.KolaKrakenAPI(tier=None, retry=2, crl_sleep=5)
 
         # set pair
         self.pair = pair
         self.tz = pytz.timezone(timezone)
 
         # set and create folder
-        self.bname = bname
-        self.folder = Path(f"{bname}-{pair}")
+        self.folder = folder
+        self.folder = Path(f"{folder}/{pair}")
         os.makedirs(self.folder, exist_ok=True)
 
         self.wait_time = wait_time
 
+    def __repr__(self):
+        _repr = {"kapi": self.kapi, "pair": self.pair, "tz": self.tz, "folder": self.folder, "wait_time": self.wait_time}
+        return pformat(_repr)
+    
     def download_trade_data(self, since, end_ts):
 
         # update or new download?
@@ -62,15 +68,20 @@ class GetTradeData(object):
         # get data
         while next_start_ts < end_ts.timestamp():
 
-            trades = self.k.get_recent_trades(pair_=self.pair, since_=next_start_ts)
-            start_ts, next_start_ts = st.ts_extent(trades, as_unix_ts_=True)
+            try:
+                trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
+                if not len(trades):
+                    raise Exception(f"not trades : {self}")
+
+                
+            start_ts, next_start_ts = ts_extent(trades, as_unix_ts_=True)
 
             try:
                 # set timezone
                 index = trades.index.tz_localize(pytz.utc).tz_convert(self.tz)
                 trades.index = index
             except AttributeError as ae:
-                print(f"trades = {trades}; next_start_ts={next_start_ts} ################")
+                print(f"### trades={trades}; next_start_ts={next_start_ts} ################")
                 raise (ae)
 
             # store
@@ -121,48 +132,49 @@ class GetTradeData(object):
         # count
         ohlc.loc[:, "nb"] = gtrades.size()
 
-        start_tsh, end_tsh = st.ts_extent(ohlc, as_unix_ts_=False)
-        start_ts, end_ts = st.ts_extent(ohlc, as_unix_ts_=True)
+        start_tsh, end_tsh = ts_extent(ohlc, as_unix_ts_=False)
+        start_ts, end_ts = ts_extent(ohlc, as_unix_ts_=True)
         # store on disc
         fout = self.folder.joinpath(f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv")
         print(f"Storing OHLC from {start_tsh} to {end_tsh} --> {fout.name}")
         ohlc.to_csv(fout)
+        return ohlc
 
 
 def main(
-    bname: str, pair: str, since: int, timezone: str, interval: int, waitTime: int
+        folder: str, pair: str, since: int, timezone: str, interval: int, waitTime: int
 ):
 
-    dl = GetTradeData(bname, pair, timezone, waitTime)
+    dl = GetTradeData(folder, pair, timezone, waitTime)
     end_ts = pd.Timestamp.now() - pd.Timedelta("60s")
 
+    logger.info(f'Starts downloading in {folder}/{pair} with TZ {timezone}. from {since}-to {end_ts}')
     dl.download_trade_data(since, end_ts)
 
     if interval:
+        logger.info(f'computing ohlc for {interval}m.')
         dl.agg_ohlc(since, interval)
 
-
-if __name__ == "__main__":
-
+def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
-        "--bname",
-        help="which (parent) folder to store data in",
+        "--folder",
+        help=("In which (parent) folder to store data.  The final folder "
+              " is the asset pair name"),
         type=str,
-        default="./cryptodata",
+        default="./Kraken",
     )
 
     parser.add_argument(
         "--pair",
         help=(
-            "asset pair to get trade data for. "
-            "see KrakenAPI(api).get_tradable_asset_pairs().index.values"
+            "asset pair for which to get the trade data. "
+            "See KrakenAPI(api).get_tradable_asset_pairs().index.values"
         ),
         type=str,
-        # default="XXBTZEUR",
         default="ADAXBT",
     )
 
@@ -170,7 +182,7 @@ if __name__ == "__main__":
         "--since",
         help=(
             "download/aggregate trade data since given unixtime (exclusive)."
-            " If 0 (default) and this script was called before, only an"
+            " If 0 and this script was called before, only an"
             " update to the most recent data is retrieved. If 0 and this"
             " function was not called before, retrieve from earliest time"
             " possible. When aggregating (interval>0), aggregate from"
@@ -209,14 +221,22 @@ if __name__ == "__main__":
         default=1.2,
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
+        
+def main_prg():
+    args =  parse_args()
     # execute
     main(
-        bname=args.bname,
+        folder=args.folder,
         pair=args.pair,
         since=args.since,
         timezone=args.timezone,
         interval=args.interval,
         waitTime=args.waitTime,
     )
+
+
+if __name__ == "__main__":
+    main_prg()
+

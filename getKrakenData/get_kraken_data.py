@@ -18,12 +18,14 @@ import pytz
 from typing import Sequence, List
 from time import sleep
 
-from pandas import read_csv, concat, Timedelta, Timestamp, to_datetime
+from pandas import read_csv, concat, Timedelta, Timestamp, to_datetime, DataFrame
 import getKrakenData.getKrakenData as kapi
 from mlkHelper.timeUtils import ts_extent
 import logging
 
-logger = logging.getLogger()
+LOGFMT = "%(asctime)s %(levelno)s /%(filename)s@%(lineno)s/ %(message)s"
+logging.basicConfig(level="INFO", format=LOGFMT)
+logger = logging.getLogger(__name__)
 
 
 class GetTradeData(object):
@@ -91,7 +93,7 @@ class GetTradeData(object):
                 trades.index = index
             except AttributeError as ae:
                 print(
-                    f"###:{slef}: trades={trades}, {type(trades)}; next_start_ts={next_start_ts} ####"
+                    f"###:{self}: trades={trades}, {type(trades)}; next_start_ts={next_start_ts} ####"
                 )
                 raise (ae)
 
@@ -127,6 +129,7 @@ class GetTradeData(object):
         # fetch files and convert to dataframe
 
         _trades = [read_csv(f) for f in data_files]
+        logger.info(f"Concatenating {len(_trades)} files.")
 
         trades = concat(_trades, axis=0)
         trades.index = to_datetime(trades.tsh)
@@ -150,9 +153,9 @@ class GetTradeData(object):
 
         # count
         ohlc.loc[:, "nb"] = gtrades.size()
-        return ohlc
+        return ohlc, trades
 
-    def save_ohlc(self, ohlc, interval, yearly_format: bool = False):
+    def save_ohlc(self, ohlc, interval, yearly_format: bool = False) -> Path:
         """
         Saving a ohlc file to disque with start and end dates
         save_format
@@ -161,12 +164,15 @@ class GetTradeData(object):
         start_ts, end_ts = ts_extent(ohlc, as_unix_ts_=True)
         # store on disc
         if yearly_format:
-            fout = self.folder.joinpath("{self.pair}-{interval}m-{end_tsh.year}.csv")
+            fout = self.folder.joinpath(
+                f"{self.pair}-{interval}m-{end_tsh.year -1}.csv"
+            )
         else:
             fout = self.folder.joinpath(f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv")
 
         print(f"Storing OHLC from {start_tsh} to {end_tsh} --> {fout.name}")
         ohlc.to_csv(fout)
+        return fout
 
     def agg_ohlc_yearly(self, years: List[int] = [], interval: int = 1):
         """
@@ -185,8 +191,16 @@ class GetTradeData(object):
             years = list(range(now_year, now_year - 10))
 
         for year in years:
-            _ohlc = self.agg_ohlc(_get_yearly_data_file(year), interval)
-            self.save_ohlc(_ohlc, interval, yearly_format=True)
+            _ohlc, _trades = self.agg_ohlc(_get_yearly_data_file(year), interval)
+            fout = self.save_ohlc(_ohlc, interval, yearly_format=True)
+            save_trades_info(_trades, fout)
+
+def save_trades_info(trades: DataFrame, fout:Path):
+    """
+    write on disk some statistiques about the trade used before resampling of fout
+    """
+    fout = fout.parent.joinpath(f"{fout.stem}-info.csv")
+    trades.describe().to_csv(fout)
 
 
 def main(
@@ -209,13 +223,15 @@ def main(
 
     if interval:
         logger.info(f"Computing ohlc for {interval}m.")
-        if not len(years):
+        if len(years) == 0:
             _data_files = dl.get_data_files(since)
-            _ohlc = dl.agg_ohlc(_data_files, interval)
+            _ohlc, _trades = dl.agg_ohlc(_data_files, interval)
             logger.info("Saving...")
-            dl.save_ohlc(_ohlc, interval)
+            fout = dl.save_ohlc(_ohlc, interval)
+            dl.save_trade_info(_trades, fout)
         else:
-            self.agg_ohlc_yearly(years, interval)
+            logger.info(f"Sampling years {years}...")
+            dl.agg_ohlc_yearly(years, interval)
 
 
 def parse_args():
@@ -289,8 +305,8 @@ def parse_args():
         "--years",
         "-Y",
         help=("if sampling downloaded trade data to ohlc set the years to sample"),
-        type=list,
-        default=[2021],
+        type=int,
+        nargs="*"
     )
 
     parser.add_argument(

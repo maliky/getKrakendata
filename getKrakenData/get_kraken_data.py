@@ -15,9 +15,10 @@ import os
 from pathlib import Path
 from pprint import pformat
 import pytz
+from typing import Sequence, List
 from time import sleep
 
-import pandas as pd
+from pandas import read_csv, concat, Timedelta, Timestamp, to_datetime
 import getKrakenData.getKrakenData as kapi
 from mlkHelper.timeUtils import ts_extent
 import logging
@@ -43,9 +44,9 @@ class GetTradeData(object):
         self.tz = pytz.timezone(timezone)
 
         # set and create folder
-        self.folder = folder
-        self.folder = Path(f"{folder}/{pair}")
-        os.makedirs(self.folder, exist_ok=True)
+        self.folder = Path(folder)
+        self.folder_data = Path(folder).joinpath(pair)
+        os.makedirs(self.folder_data, exist_ok=True)
 
         self.wait_time = wait_time
 
@@ -55,6 +56,7 @@ class GetTradeData(object):
             "pair": self.pair,
             "tz": self.tz,
             "folder": self.folder,
+            "folder_data": self.folder_data,
             "wait_time": self.wait_time,
         }
         return pformat(_repr)
@@ -63,9 +65,9 @@ class GetTradeData(object):
 
         # update or new download?
         if not since:
-            fs = [f for f in os.listdir(self.folder) if not f.startswith("_")]
+            fs = [f for f in os.listdir(self.folder_data) if not f.startswith("_")]
 
-            # get the last time stamp in the folder to run an update
+            # get the last time stamp in the folder_data to run an update
             if len(fs) > 0:
                 fs.sort()
                 next_start_ts = int(fs[-1].split(".")[0])
@@ -89,26 +91,28 @@ class GetTradeData(object):
                 trades.index = index
             except AttributeError as ae:
                 print(
-                    f"### trades={trades}; next_start_ts={next_start_ts} ################"
+                    f"###:{slef}: trades={trades}, {type(trades)}; next_start_ts={next_start_ts} ####"
                 )
                 raise (ae)
 
             # store
-            fout = self.folder.joinpath(f"{start_ts}.csv")
+            fout = self.folder_data.joinpath(f"{start_ts}.csv")
             print(
-                f"Trade data from ts {start_ts} ({pd.Timestamp(start_ts*1e9)}) --> {fout}"
+                f"Trade data from ts {start_ts} ({Timestamp(start_ts*1e9)}) --> {fout}"
             )
             trades.to_csv(fout)
             sleep(self.wait_time)
 
         print("\n download/update finished!")
 
-    def agg_ohlc(self, since: int, interval: int = 1):
-
-        # fetch files and convert to dataframe
+    def get_data_files(self, since: int = 0) -> List[Path]:
+        """
+        Returns a list of data file from the data_folder
+        since is the timestamp (unix format) from which to get the data files
+        """
         _fs = [
-            self.folder.joinpath(f)
-            for f in os.listdir(self.folder)
+            self.folder_data.joinpath(f)
+            for f in os.listdir(self.folder_data)
             if not f.startswith("_")
         ]
         _fs.sort(reverse=True)
@@ -116,16 +120,22 @@ class GetTradeData(object):
         if since > 0:
             _fs = [f for f in _fs if int(f.name.split(".")[0]) >= since]
 
-        _trades = [pd.read_csv(f) for f in _fs]
+        return _fs
 
-        trades = pd.concat(_trades, axis=0)
-        trades.index = pd.to_datetime(trades.tsh)
+    def agg_ohlc(self, data_files: Sequence, interval: int = 1):
+        """build the ohlc file"""
+        # fetch files and convert to dataframe
+
+        _trades = [read_csv(f) for f in data_files]
+
+        trades = concat(_trades, axis=0)
+        trades.index = to_datetime(trades.tsh)
         trades = trades.drop("tsh", axis=1)
 
         trades.loc[:, "cost"] = trades.price * trades.volume
 
         # resample
-        gtrades = trades.resample(pd.Timedelta(f"{interval}min"))
+        gtrades = trades.resample(Timedelta(f"{interval}min"))
 
         # ohlc, volume
         ohlc = gtrades.price.ohlc()
@@ -140,22 +150,57 @@ class GetTradeData(object):
 
         # count
         ohlc.loc[:, "nb"] = gtrades.size()
+        return ohlc
 
+    def save_ohlc(self, ohlc, interval, yearly_format: bool = False):
+        """
+        Saving a ohlc file to disque with start and end dates
+        save_format
+        """
         start_tsh, end_tsh = ts_extent(ohlc, as_unix_ts_=False)
         start_ts, end_ts = ts_extent(ohlc, as_unix_ts_=True)
         # store on disc
-        fout = self.folder.joinpath(f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv")
+        if yearly_format:
+            fout = self.folder.joinpath("{self.pair}-{interval}m-{end_tsh.year}.csv")
+        else:
+            fout = self.folder.joinpath(f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv")
+
         print(f"Storing OHLC from {start_tsh} to {end_tsh} --> {fout.name}")
         ohlc.to_csv(fout)
-        return ohlc
+
+    def agg_ohlc_yearly(self, years: List[int] = [], interval: int = 1):
+        """
+        aggregate data from the folder_data in a yearly ohlc dataframe
+        year should be a sequence of years.  If none make one big ohlc dataframe
+        """
+
+        def _get_yearly_data_file(year):
+            """Returns the bunch of file corresponding to year"""
+            set_a = set(self.get_data_files(Timestamp(f"{year}").timestamp()))
+            set_b = set(self.get_data_files(Timestamp(f"{year+1}").timestamp()))
+            return list(set_a - set_b)
+
+        if len(years) == 0:
+            now_year = Timestamp.now().year()
+            years = list(range(now_year, now_year - 10))
+
+        for year in years:
+            _ohlc = self.agg_ohlc(_get_yearly_data_file(year), interval)
+            self.save_ohlc(_ohlc, interval, yearly_format=True)
 
 
 def main(
-    folder: str, pair: str, since: int, timezone: str, interval: int, waitTime: int
+    folder: str,
+    pair: str,
+    since: int,
+    timezone: str,
+    interval: int,
+    waitTime: int,
+    years: bool,
 ):
 
     dl = GetTradeData(folder, pair, timezone, waitTime)
-    end_ts = pd.Timestamp.now() - pd.Timedelta("60s")
+    end_ts = Timestamp.now() - Timedelta("60s")
 
     logger.info(
         f"Starts downloading in {folder}/{pair} with TZ {timezone}. from {since}-to {end_ts}"
@@ -163,8 +208,14 @@ def main(
     dl.download_trade_data(since, end_ts)
 
     if interval:
-        logger.info(f"computing ohlc for {interval}m.")
-        dl.agg_ohlc(since, interval)
+        logger.info(f"Computing ohlc for {interval}m.")
+        if not len(years):
+            _data_files = dl.get_data_files(since)
+            _ohlc = dl.agg_ohlc(_data_files, interval)
+            logger.info("Saving...")
+            dl.save_ohlc(_ohlc, interval)
+        else:
+            self.agg_ohlc_yearly(years, interval)
 
 
 def parse_args():
@@ -175,9 +226,10 @@ def parse_args():
 
     parser.add_argument(
         "--folder",
+        "-f",
         help=(
-            "In which (parent) folder to store data.  The final folder "
-            " is the asset pair name"
+            "In which folder store the data?  The folder_data containing data file "
+            " will be a subfolder with the asset pair name"
         ),
         type=str,
         default="./Kraken",
@@ -185,6 +237,7 @@ def parse_args():
 
     parser.add_argument(
         "--pair",
+        "-p",
         help=(
             "asset pair for which to get the trade data. "
             "See KrakenAPI(api).get_tradable_asset_pairs().index.values"
@@ -195,6 +248,7 @@ def parse_args():
 
     parser.add_argument(
         "--since",
+        "-s",
         help=(
             "download/aggregate trade data since given unixtime (exclusive)."
             " If 0 and this script was called before, only an"
@@ -209,6 +263,7 @@ def parse_args():
 
     parser.add_argument(
         "--timezone",
+        "-t",
         help=(
             "convert the timezone of timestamps to ``timezone``, which must "
             "be a string that pytz.timezone() accepts (see "
@@ -220,6 +275,7 @@ def parse_args():
 
     parser.add_argument(
         "--interval",
+        "-i",
         help=(
             "sample downloaded trade data to ohlc format with the given time"
             "interval (minutes). If 0 (default), only download/update trade "
@@ -230,7 +286,16 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--years",
+        "-Y",
+        help=("if sampling downloaded trade data to ohlc set the years to sample"),
+        type=list,
+        default=[2021],
+    )
+
+    parser.add_argument(
         "--waitTime",
+        "-w",
         help=("time to wait between calls in second"),
         type=int,
         default=1.2,
@@ -249,6 +314,7 @@ def main_prg():
         timezone=args.timezone,
         interval=args.interval,
         waitTime=args.waitTime,
+        years=args.years,
     )
 
 

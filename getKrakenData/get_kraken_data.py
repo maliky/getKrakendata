@@ -23,7 +23,7 @@ import getKrakenData.getKrakenData as kapi
 from mlkHelper.timeUtils import ts_extent
 import logging
 
-LOGFMT = "%(asctime)s %(levelno)s /%(filename)s@%(lineno)s/ %(message)s"
+LOGFMT = "%(asctime)s~%(levelno)s~/%(filename)s@%(lineno)s/ %(message)s"
 logging.basicConfig(level="INFO", format=LOGFMT)
 logger = logging.getLogger(__name__)
 

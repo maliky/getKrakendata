@@ -79,12 +79,12 @@ class GetTradeData(object):
             next_start_ts = since
 
         # get data
-        while next_start_ts < end_ts.timestamp():
+        while next_start_ts <= end_ts.timestamp():
 
             trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
             logger.debug(trades)
-            if not len(trades):
-                raise Exception(f"not trades : {self}")
+            if len(trades) < 2:
+                raise Exception(f"not enought trades returned : {self}")
 
             start_ts, next_start_ts = ts_extent(trades, as_unix_ts_=True)
 

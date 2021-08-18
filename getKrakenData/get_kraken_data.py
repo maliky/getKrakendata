@@ -79,36 +79,34 @@ class GetTradeData(object):
             next_start_ts = since
 
         # get data
-        while next_start_ts <= end_ts.timestamp():
+        stop = False
+        while next_start_ts <= end_ts.timestamp() or stop:
 
             trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
             logger.debug(trades)
+
             if len(trades) < 2:
                 # raise Exception(f"not enought trades returned : {self}")
-                logger.info("API is returning only {len(trades)}, so were are Stopping Here.")
+                logger.info(f"API is returning only '{len(trades)}', so were are Stopping Here.")
+                stop = True
                 break
+            else:
+                start_ts, next_start_ts = ts_extent(trades, as_unix_ts_=True)
 
-
-            start_ts, next_start_ts = ts_extent(trades, as_unix_ts_=True)
-
-            try:
-                # set timezone
                 index = trades.index.tz_localize(pytz.utc).tz_convert(self.tz)
                 trades.index = index
-            except AttributeError as ae:
-                pprint(
-                    f"###:\nself={self}: trades ({type(trades)})={trades};"
-                    f" next_start_ts={next_start_ts} ####"
-                )
-                raise (ae)
+                # pprint(
+                #     f"###:\nself={self}: trades ({type(trades)})={trades};"
+                #     f" next_start_ts={next_start_ts} ####"
+                # )
 
-            # store
-            fout = self.folder_data.joinpath(f"{start_ts}.csv")
-            print(
-                f"Trade data from ts {start_ts} ({Timestamp(start_ts*1e9)}) --> {fout}"
-            )
-            trades.to_csv(fout)
-            sleep(self.wait_time)
+                # store
+                fout = self.folder_data.joinpath(f"{start_ts}.csv")
+                print(
+                    f"Trade data from ts {start_ts} ({Timestamp(start_ts*1e9)}) --> {fout}"
+                )
+                trades.to_csv(fout)
+                sleep(self.wait_time)
 
         print("\n download/update finished!")
 

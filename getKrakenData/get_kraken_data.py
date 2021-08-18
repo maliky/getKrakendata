@@ -84,7 +84,10 @@ class GetTradeData(object):
             trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
             logger.debug(trades)
             if len(trades) < 2:
-                raise Exception(f"not enought trades returned : {self}")
+                # raise Exception(f"not enought trades returned : {self}")
+                logger.info("API is returning only {len(trades)}, so were are Stopping Here.")
+                break
+
 
             start_ts, next_start_ts = ts_extent(trades, as_unix_ts_=True)
 

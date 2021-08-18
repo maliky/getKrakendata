@@ -13,7 +13,7 @@ downloading/updating trade data. Data is stored as a pandas.DataFrame (in
 import argparse
 import os
 from pathlib import Path
-from pprint import pformat
+from pprint import pformat, pprint
 import pytz
 from typing import Sequence, List
 from time import sleep
@@ -82,6 +82,7 @@ class GetTradeData(object):
         while next_start_ts < end_ts.timestamp():
 
             trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
+            logger.debug(trades)
             if not len(trades):
                 raise Exception(f"not trades : {self}")
 
@@ -92,8 +93,9 @@ class GetTradeData(object):
                 index = trades.index.tz_localize(pytz.utc).tz_convert(self.tz)
                 trades.index = index
             except AttributeError as ae:
-                print(
-                    f"###:{self}: trades={trades}, {type(trades)}; next_start_ts={next_start_ts} ####"
+                pprint(
+                    f"###:\nself={self}: trades ({type(trades)})={trades};"
+                    f" next_start_ts={next_start_ts} ####"
                 )
                 raise (ae)
 
@@ -195,7 +197,8 @@ class GetTradeData(object):
             fout = self.save_ohlc(_ohlc, interval, yearly_format=True)
             save_trades_info(_trades, fout)
 
-def save_trades_info(trades: DataFrame, fout:Path):
+
+def save_trades_info(trades: DataFrame, fout: Path):
     """
     write on disk some statistiques about the trade used before resampling of fout
     """
@@ -306,7 +309,7 @@ def parse_args():
         "-Y",
         help=("if sampling downloaded trade data to ohlc set the years to sample"),
         type=int,
-        nargs="*"
+        nargs="*",
     )
 
     parser.add_argument(
@@ -314,7 +317,13 @@ def parse_args():
         "-w",
         help=("time to wait between calls in second"),
         type=int,
-        default=1.2,
+        default=2,
+    )
+
+    parser.add_argument(
+        "--logLevel",
+        "-L",
+        default="INFO",
     )
 
     return parser.parse_args()
@@ -322,6 +331,9 @@ def parse_args():
 
 def main_prg():
     args = parse_args()
+
+    logger.setLevel(args.logLevel)
+
     # execute
     main(
         folder=args.folder,

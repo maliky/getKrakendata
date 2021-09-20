@@ -27,7 +27,6 @@ LOGFMT = "%(asctime)s~%(levelno)s~/%(filename)s@%(lineno)s/ %(message)s"
 logging.basicConfig(level="INFO", format=LOGFMT)
 logger = logging.getLogger(__name__)
 
-
 class GetTradeData(object):
     def __init__(
         self, folder, pair: str, timezone: str = "Africa/Abidjan", wait_time=1.2
@@ -168,7 +167,7 @@ class GetTradeData(object):
         # store on disc
         if yearly_format:
             fout = self.folder.joinpath(
-                f"{self.pair}-{interval}m-{end_tsh.year -1}.csv"
+                f"{self.pair}-{interval}m-{start_tsh.year}.csv"
             )
         else:
             fout = self.folder.joinpath(f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv")

@@ -11,7 +11,6 @@ import pandas as pd
 
 import krakenex as krx
 from pykrakenapi.pykrakenapi import crl_sleep, callratelimiter
-
 from getKrakenData.constante import KRAKEN_TRADABLE_PAIRS_USD_QUOTE
 
 # https://www.kraken.com/features/api#public-market-data
@@ -40,13 +39,10 @@ def fmt_output(as_="DataFrame"):
 
 
 class KolaKrakenAPI:
-    def __init__(self, keyfile="keys.txt", tier="Intermediate", retry=2, crl_sleep=10):
+    def __init__(self, tier="Intermediate", retry=2, crl_sleep=10):
         """Init for KolaKraken"""
         self._api = krx.API()
-        try:
-            self._api.load_key("keys.txt")
-        except FileNotFoundError as fnfe:
-            raise Exception(f"No keys.txt file in {os.getcwd()}: {fnfe}")
+        self._api.load_env_key("KRAKEN_API_KEY", "KRAKEN_API_SECRET")
         self._asset = None
         self._asset_pairs = None
 

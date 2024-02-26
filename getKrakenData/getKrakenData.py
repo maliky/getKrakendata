@@ -205,7 +205,7 @@ class KolaKrakenAPI:
         try:
             trades = DataFrame(
                 data=raw_trades[pair_],
-                columns=["price", "volume", "ts", "side", "order", "misc"],
+                columns=["price", "volume", "ts", "side", "order", "misc", "num"],
             )
         except KeyError:
             # need to handle this in a better way

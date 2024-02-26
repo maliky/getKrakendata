@@ -13,12 +13,18 @@ downloading/updating trade data. Data is stored as a pandas.DataFrame (in
 import argparse
 import os
 from pathlib import Path
-from pprint import pformat, pprint
 import pytz
 from typing import Sequence, List
 from time import sleep
 
-from pandas import read_csv, concat, Timedelta, Timestamp, to_datetime, DataFrame
+from pandas import (
+    read_csv,
+    concat,
+    Timedelta,
+    Timestamp,
+    to_datetime,
+    DataFrame,
+)
 import getKrakenData.getKrakenData as kapi
 from mlkHelper.timeUtils import ts_extent
 import logging
@@ -26,6 +32,7 @@ import logging
 LOGFMT = "%(asctime)s~%(levelno)s~/%(filename)s@%(lineno)s/ %(message)s"
 logging.basicConfig(level="INFO", format=LOGFMT)
 logger = logging.getLogger(__name__)
+
 
 class GetTradeData(object):
     def __init__(
@@ -66,7 +73,9 @@ class GetTradeData(object):
 
         # update or new download?
         if not since:
-            fs = [f for f in os.listdir(self.folder_data) if not f.startswith("_")]
+            fs = [
+                f for f in os.listdir(self.folder_data) if not f.startswith("_")
+            ]
 
             # get the last time stamp in the folder_data to run an update
             if len(fs) > 0:
@@ -81,12 +90,17 @@ class GetTradeData(object):
         stop = False
         while next_start_ts <= end_ts.timestamp() or stop:
 
-            trades = self.kapi.get_recent_trades(pair_=self.pair, since_=next_start_ts)
-            logger.debug(trades)
+            trades = self.kapi.get_recent_trades(
+                pair_=self.pair, since_=next_start_ts
+            )
+            logger.debug(f">>>> trades :{trades}")
 
             if len(trades) < 2:
                 # raise Exception(f"not enought trades returned : {self}")
-                logger.info(f"API is returning only '{len(trades)}', so were are Stopping Here.")
+                logger.info(
+                    f"API is returning only '{len(trades)}', so were are Stopping Here."
+                )
+                print(trades)
                 stop = True
                 break
             else:
@@ -170,7 +184,9 @@ class GetTradeData(object):
                 f"{self.pair}-{interval}m-{start_tsh.year}.csv"
             )
         else:
-            fout = self.folder.joinpath(f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv")
+            fout = self.folder.joinpath(
+                f"_ohlc_{start_ts}-{end_ts}_{interval}m.csv"
+            )
 
         print(f"Storing OHLC from {start_tsh} to {end_tsh} --> {fout.name}")
         ohlc.to_csv(fout)
@@ -193,7 +209,9 @@ class GetTradeData(object):
             years = list(range(now_year, now_year - 10))
 
         for year in years:
-            _ohlc, _trades = self.agg_ohlc(_get_yearly_data_file(year), interval)
+            _ohlc, _trades = self.agg_ohlc(
+                _get_yearly_data_file(year), interval
+            )
             fout = self.save_ohlc(_ohlc, interval, yearly_format=True)
             save_trades_info(_trades, fout)
 
@@ -274,7 +292,7 @@ def parse_args():
             " update to the most recent data is retrieved. If 0 and this"
             " function was not called before, retrieve from earliest time"
             " possible. When aggregating (interval>0), aggregate from"
-            " ``since`` onwards (unixtime)."
+            " ``since`` onwards (unixtime).  use date -d '2023-12-24' +%s'"
         ),
         type=int,
         default=0,
@@ -307,7 +325,9 @@ def parse_args():
     parser.add_argument(
         "--years",
         "-Y",
-        help=("if sampling downloaded trade data to ohlc set the years to sample"),
+        help=(
+            "if sampling downloaded trade data to ohlc set the years to sample"
+        ),
         type=int,
         nargs="*",
     )
@@ -333,7 +353,7 @@ def main_prg():
     args = parse_args()
 
     logger.setLevel(args.logLevel)
-
+    print(args.logLevel)
     # execute
     main(
         folder=args.folder,
